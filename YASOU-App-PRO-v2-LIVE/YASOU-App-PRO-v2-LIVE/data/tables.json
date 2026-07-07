@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 2,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 3,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 4,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 5,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 6,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 9,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 10,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 11,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 12,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 13,
+    "seats": 4,
+    "area": "inside"
+  },
+  {
+    "id": 14,
+    "seats": 4,
+    "area": "inside"
+  }
+]
