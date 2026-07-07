@@ -5,7 +5,7 @@ import { AREA_NAMES } from '../config/booking-times.js';
 
 let timer = null;
 
-export function render(){
+export function render() {
   return `
     <div class="app-shell">
       ${sidebar('dashboard')}
@@ -15,20 +15,27 @@ export function render(){
             <h2>דשבורד מנהלת</h2>
             <p>הזמנות חיות מ-Google Sheets</p>
           </div>
+
           <div class="actions">
             <button class="btn primary" id="refreshBtn">רענון</button>
             <a class="btn" href="booking/index.html" target="_blank">פתיחת דף הזמנות</a>
           </div>
         </div>
 
-        <div class="notice">הלקוחות רואים רק שעות. המתחם מחושב אוטומטית לפי השעה ומוצג כאן למנהלת בלבד.</div>
+        <div class="notice">
+          הלקוחות רואים רק שעות. המתחם מחושב אוטומטית לפי השעה ומוצג כאן למנהלת בלבד.
+        </div>
+
+        <div class="error" id="dashboardError"></div>
 
         <section class="grid stats" id="stats"></section>
 
         <section class="grid content-grid" style="margin-top:16px">
           <div class="panel">
             <h3>הזמנות היום</h3>
-            <div class="list" id="todayList"><div class="empty">טוען...</div></div>
+            <div class="list" id="todayList">
+              <div class="empty">טוען...</div>
+            </div>
           </div>
 
           <div class="panel">
@@ -41,55 +48,112 @@ export function render(){
   `;
 }
 
-export async function init(){
+export async function init() {
   document.getElementById('refreshBtn').onclick = refresh;
+
   await refresh();
+
   clearInterval(timer);
   timer = setInterval(refresh, 30000);
 }
 
-async function refresh(){
-  const all = await loadReservations();
-  const today = todayISO();
-  const todayRows = all.filter(r => r.date === today && r.status !== 'cancelled')
-                       .sort((a,b) => (a.time || '').localeCompare(b.time || ''));
+async function refresh() {
+  const refreshBtn = document.getElementById('refreshBtn');
+  const errorBox = document.getElementById('dashboardError');
 
-  renderStats(todayRows);
-  renderList(todayRows);
-  renderArea(todayRows);
-  bindActions();
+  try {
+    refreshBtn.textContent = 'טוען...';
+    refreshBtn.disabled = true;
+    errorBox.textContent = '';
+
+    const all = await loadReservations();
+    const today = todayISO();
+
+    const todayRows = all
+      .filter(r => r.date === today && r.status !== 'cancelled')
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+    renderStats(todayRows);
+    renderList(todayRows);
+    renderArea(todayRows);
+    bindActions();
+
+  } catch (err) {
+    errorBox.textContent = 'שגיאה בטעינת ההזמנות מהגיליון. בדוק את Apps Script או את הקישור API.';
+    document.getElementById('todayList').innerHTML =
+      '<div class="empty">לא ניתן לטעון הזמנות כרגע</div>';
+
+  } finally {
+    refreshBtn.textContent = 'רענון';
+    refreshBtn.disabled = false;
+  }
 }
 
-function renderStats(rows){
-  const guests = rows.reduce((s,r)=>s+Number(r.guests||0),0);
-  const waiting = rows.filter(r=>r.status==='waiting').length;
-  const newCount = rows.filter(r=>r.status==='new').length;
-  const confirmed = rows.filter(r=>r.status==='confirmed').length;
+function renderStats(rows) {
+  const guests = rows.reduce((s, r) => s + Number(r.guests || 0), 0);
+  const waiting = rows.filter(r => r.status === 'waiting').length;
+  const newCount = rows.filter(r => r.status === 'new').length;
+  const confirmed = rows.filter(r => r.status === 'confirmed').length;
+  const receipts = rows.filter(r => r.receiptUrl || r.receiptFileName).length;
 
   document.getElementById('stats').innerHTML = `
-    <div class="stat"><strong>${rows.length}</strong><span>הזמנות היום</span></div>
-    <div class="stat"><strong>${guests}</strong><span>סועדים</span></div>
-    <div class="stat"><strong>${newCount}</strong><span>חדשות</span></div>
-    <div class="stat"><strong>${confirmed}</strong><span>מאושרות</span></div>
-    <div class="stat"><strong>${waiting}</strong><span>בהמתנה</span></div>
+    <div class="stat">
+      <strong>${rows.length}</strong>
+      <span>הזמנות היום</span>
+    </div>
+
+    <div class="stat">
+      <strong>${guests}</strong>
+      <span>סועדים</span>
+    </div>
+
+    <div class="stat">
+      <strong>${newCount}</strong>
+      <span>חדשות</span>
+    </div>
+
+    <div class="stat">
+      <strong>${confirmed}</strong>
+      <span>מאושרות</span>
+    </div>
+
+    <div class="stat">
+      <strong>${waiting}</strong>
+      <span>בהמתנה</span>
+    </div>
+
+    <div class="stat">
+      <strong>${receipts}</strong>
+      <span>קבלות Bit</span>
+    </div>
   `;
 }
 
-function renderList(rows){
+function renderList(rows) {
   document.getElementById('todayList').innerHTML =
-    rows.length ? rows.map(r => reservationCard(r)).join('') : '<div class="empty">אין הזמנות להיום</div>';
+    rows.length
+      ? rows.map(r => reservationCard(r)).join('')
+      : '<div class="empty">אין הזמנות להיום</div>';
 }
 
-function renderArea(rows){
-  const areas = ['covered','inside','outside'];
+function renderArea(rows) {
+  const areas = ['covered', 'inside', 'outside'];
+
   document.getElementById('areaBreakdown').innerHTML = areas.map(area => {
     const areaRows = rows.filter(r => r.area === area);
-    const guests = areaRows.reduce((s,r)=>s+Number(r.guests||0),0);
-    return `<div><span>${AREA_NAMES[area]}</span><strong>${guests}</strong><small>${areaRows.length} הזמנות</small></div>`;
+    const guests = areaRows.reduce((s, r) => s + Number(r.guests || 0), 0);
+
+    return `
+      <div>
+        <span>${AREA_NAMES[area]}</span>
+        <strong>${guests}</strong>
+        <small>${areaRows.length} הזמנות</small>
+      </div>
+    `;
   }).join('');
 }
 
-function bindActions(){
+function bindActions() {
   document.querySelectorAll('[data-status-id]').forEach(btn => {
     btn.onclick = async () => {
       await updateReservationStatus(btn.dataset.statusId, btn.dataset.status);
