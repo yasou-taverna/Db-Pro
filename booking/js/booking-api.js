@@ -3,7 +3,10 @@ export const API_URL = 'https://script.google.com/macros/s/AKfycbwks0TjPdW0Ag8To
 export async function postReservation(reservation) {
   const response = await fetch(API_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'addReservation', ...reservation })
+    body: JSON.stringify({
+      action: 'addReservation',
+      ...reservation
+    })
   });
 
   try {
