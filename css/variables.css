@@ -1,0 +1,16 @@
+:root{
+  --bg:#f6f2ea;
+  --panel:#fffdf8;
+  --panel-strong:#fff6e4;
+  --text:#1f2520;
+  --muted:#6e746d;
+  --line:#ded7ca;
+  --brand:#206c5b;
+  --brand-dark:#12483c;
+  --gold:#d99f2f;
+  --free:#3aa66d;
+  --reserved:#e69828;
+  --occupied:#c9463d;
+  --danger:#c9463d;
+  --shadow:0 16px 40px rgba(39,33,23,.10);
+}

@@ -1,0 +1,59 @@
+import { apiGet, apiPost } from './api.service.js';
+import { BOOKING_TIMES } from '../config/booking-times.js';
+
+const memory = {
+  reservations: []
+};
+
+export async function loadReservations(){
+  const rows = await apiGet('getReservations');
+  memory.reservations = Array.isArray(rows) ? rows.map(normalizeReservation) : [];
+  return memory.reservations;
+}
+
+export function getCachedReservations(){
+  return memory.reservations;
+}
+
+export async function updateReservationStatus(id, status){
+  await apiPost({ action:'updateReservationStatus', id, status });
+  const item = memory.reservations.find(r => r.id === id);
+  if (item) item.status = status;
+  return item;
+}
+
+export function normalizeReservation(r){
+  const time = String(r.time || '').slice(0,5);
+  return {
+    id: String(r.id || ''),
+    customerName: String(r.customerName || r.name || ''),
+    phone: String(r.phone || ''),
+    date: formatDateValue(r.date),
+    time,
+    guests: Number(r.guests || 0),
+    area: String(r.area || BOOKING_TIMES[time] || ''),
+    tableId: String(r.tableId || ''),
+    status: String(r.status || 'new'),
+    notes: String(r.notes || ''),
+    depositStatus: String(r.depositStatus || 'pending'),
+    source: String(r.source || ''),
+    createdAt: String(r.createdAt || '')
+  };
+}
+
+function formatDateValue(value){
+  if (!value) return '';
+  if (typeof value === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0,10);
+    return value;
+  }
+  try {
+    return new Date(value).toISOString().slice(0,10);
+  } catch(e) {
+    return String(value);
+  }
+}
+
+export function todayISO(){
+  return new Date().toISOString().slice(0,10);
+}

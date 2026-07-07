@@ -1,0 +1,14 @@
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:linear-gradient(120deg,rgba(32,108,91,.08),transparent 36%),var(--bg);color:var(--text);font-family:"Assistant",Arial,sans-serif}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+a{color:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:10px;padding:10px 14px;font-weight:900;text-decoration:none;box-shadow:0 4px 14px rgba(31,37,32,.06)}
+.btn.primary{background:var(--brand);color:white;border-color:var(--brand)}
+.btn.danger{background:#fff5f3;color:var(--danger);border-color:#f2c4be}
+.btn.whatsapp{background:#e9fbef;color:#137a3b;border-color:#bfe9cb}
+.btn.small{padding:7px 10px;font-size:.9rem}
+.field{display:grid;gap:6px}
+.field label{font-weight:900;color:#3f463f}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;color:var(--text)}
+.empty{color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--line);border-radius:10px;background:rgba(255,255,255,.58)}
