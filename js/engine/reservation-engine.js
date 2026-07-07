@@ -4,6 +4,7 @@ import { assignTable } from './table-engine.js';
 
 export function createReservation(formData, existingReservations = []) {
   const area = BOOKING_TIMES[formData.time] || '';
+
   const allocation = assignTable({
     area,
     guests: formData.guests,
@@ -14,16 +15,27 @@ export function createReservation(formData, existingReservations = []) {
 
   return {
     id: createId(),
+
     customerName: formData.customerName,
     phone: formData.phone,
     date: formData.date,
     time: formData.time,
     guests: Number(formData.guests),
+
     area,
     tableId: allocation.tableId,
+
     status: allocation.tableId ? 'new' : 'waiting',
-    notes: formData.notes || '',
+
+    reservationType: formData.reservationType || 'private',
+
+    notes: '',
+
     depositStatus: RESTAURANT_RULES.depositStatusDefault,
+
+    receiptFileName: '',
+    receiptUrl: '',
+
     source: 'public-booking',
     createdAt: new Date().toISOString()
   };
