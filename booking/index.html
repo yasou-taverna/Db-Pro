@@ -6,6 +6,7 @@
 <title>הזמנת שולחן | Yasou Taverna</title>
 <link rel="stylesheet" href="css/booking.css">
 </head>
+
 <body>
 <header class="hero">
   <div class="brand">YASOU</div>
@@ -89,26 +90,43 @@
       אני מאשר/ת את תנאי ההזמנה והפיקדון
     </label>
 
-    <div class="field">
-      <label>הערות</label>
-      <textarea id="notes" placeholder="בקשות מיוחדות, יום הולדת וכו׳"></textarea>
-    </div>
-
     <button id="continueBtn" class="btn primary">המשך לתשלום פיקדון</button>
     <div class="error" id="errorBox"></div>
   </section>
 
   <section class="card hidden" id="stepPayment">
     <h2>כמעט סיימנו</h2>
+
     <div class="summary" id="summaryBox"></div>
 
     <a class="btn bit" href="https://www.bitpay.co.il/app/me/672C703C-84B6-5622-19CF-CF25BD06FA6AB39E" target="_blank" rel="noopener">
       מעבר לתשלום פיקדון ב-Bit
     </a>
 
-    <p class="hint">לאחר התשלום בביט, חזור/חזרי לכאן ולחץ/י על שליחת ההזמנה.</p>
+    <p class="hint">
+      לאחר התשלום בביט, חזור/חזרי לכאן והעלו צילום ברור של קבלת התשלום.
+    </p>
 
-    <button id="submitBtn" class="btn primary">שליחת ההזמנה</button>
+    <div class="upload-box">
+      <label for="receiptFile" class="upload-label">
+        <span class="upload-icon">☁️</span>
+        <strong>העלאת קבלת תשלום</strong>
+        <small>קובץ תמונה בלבד: JPG / PNG</small>
+      </label>
+
+      <input id="receiptFile" type="file" accept="image/png,image/jpeg,image/jpg" hidden>
+
+      <div class="receipt-preview hidden" id="receiptPreview">
+        <img id="receiptImage" alt="קבלת תשלום">
+        <p id="receiptFileName"></p>
+      </div>
+    </div>
+
+    <div class="info-box">
+      נא להעלות צילום ברור של קבלת התשלום מביט.
+    </div>
+
+    <button id="submitBtn" class="btn primary" disabled>שליחת ההזמנה</button>
     <button id="backBtn" class="btn secondary">חזרה לעריכה</button>
 
     <div class="ok hidden" id="okBox">ההזמנה נשלחה בהצלחה.</div>
