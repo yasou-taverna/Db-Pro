@@ -8,16 +8,22 @@ const state = { draft: null };
 
 $('date').valueAsDate = new Date();
 
-for (let i = 1; i <= 12; i++) {
-  $('guests').innerHTML += `<option value="${i}">${i}</option>`;
+/* מונע כפילות אם כבר יש options ב-HTML */
+if ($('guests').children.length <= 1) {
+  for (let i = 1; i <= 12; i++) {
+    $('guests').innerHTML += `<option value="${i}">${i}</option>`;
+  }
 }
 
-PUBLIC_TIMES.forEach((time) => {
-  $('time').innerHTML += `<option value="${time}">${time}</option>`;
-});
+if ($('time').children.length <= 1) {
+  PUBLIC_TIMES.forEach((time) => {
+    $('time').innerHTML += `<option value="${time}">${time}</option>`;
+  });
+}
 
 $('continueBtn').addEventListener('click', () => {
   $('errorBox').textContent = '';
+
   const formData = getFormData();
   const errors = validateBookingForm(formData, $('agree').checked);
 
@@ -34,6 +40,7 @@ $('continueBtn').addEventListener('click', () => {
     <strong>תאריך:</strong> ${state.draft.date}<br>
     <strong>שעה:</strong> ${state.draft.time}<br>
     <strong>סועדים:</strong> ${state.draft.guests}<br>
+    <strong>סוג הזמנה:</strong> ${getReservationTypeLabel(state.draft.reservationType)}<br>
     <strong>פיקדון:</strong> ממתין לתשלום
   `;
 
@@ -48,6 +55,7 @@ $('backBtn').addEventListener('click', () => {
 
 $('submitBtn').addEventListener('click', async () => {
   $('paymentErrorBox').textContent = '';
+
   if (!state.draft) return;
 
   $('submitBtn').disabled = true;
@@ -70,6 +78,12 @@ function getFormData() {
     date: $('date').value,
     time: $('time').value,
     guests: Number($('guests').value),
+    reservationType: $('reservationType').value,
     notes: $('notes').value.trim()
   };
+}
+
+function getReservationTypeLabel(type) {
+  if (type === 'group') return 'הזמנה כקבוצה';
+  return 'הזמנה פרטית';
 }
