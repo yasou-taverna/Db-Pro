@@ -29,37 +29,56 @@ export function reservationTypeLabel(type) {
 
 export function reservationCard(r, actions = true) {
   const areaName = AREA_NAMES[r.area] || r.area || '-';
-  const hasReceipt = Boolean(r.receiptUrl || r.receiptFileName);
+  const hasReceipt = Boolean(r.receiptUrl);
 
   return `
-    <div class="reservation-row">
-      <div>
-        <p class="row-title">
-          ${escapeHtml(r.customerName || 'ללא שם')} · ${r.guests || 0} סועדים
-        </p>
+    <div class="reservation-row reservation-status-${r.status || 'new'}">
 
-        <div class="row-meta">
-          🕗 ${r.time || '-'} · 📅 ${r.date || '-'} · 🏛️ ${areaName} · 🪑 שולחן ${r.tableId || 'המתנה'}<br>
-          📞 ${escapeHtml(r.phone || '-')} · 👥 ${reservationTypeLabel(r.reservationType)}<br>
-          💳 פיקדון: ${depositLabel(r.depositStatus)} · 📷 קבלה: ${hasReceipt ? 'קיימת' : 'חסרה'}
-          ${r.receiptUrl ? `<br><a class="receipt-link" href="${escapeAttr(r.receiptUrl)}" target="_blank" rel="noopener">פתח קבלת Bit</a>` : ''}
+      <div class="reservation-main">
+        <div class="reservation-header">
+          <p class="row-title">
+            ${escapeHtml(r.customerName || 'ללא שם')}
+            <span>· ${r.guests || 0} סועדים</span>
+          </p>
+
+          <span class="badge ${r.status || 'new'}">
+            ${statusLabel(r.status)}
+          </span>
+        </div>
+
+        <div class="row-meta reservation-details">
+          <span>🕗 ${r.time || '-'}</span>
+          <span>📅 ${r.date || '-'}</span>
+          <span>🏛️ ${areaName}</span>
+          <span>🪑 שולחן ${r.tableId || 'המתנה'}</span>
+          <span>📞 ${escapeHtml(r.phone || '-')}</span>
+          <span>👥 ${reservationTypeLabel(r.reservationType)}</span>
+          <span>💳 ${depositLabel(r.depositStatus)}</span>
+          <span>📷 ${hasReceipt ? 'קבלה קיימת' : 'קבלה חסרה'}</span>
+        </div>
+
+        <div class="receipt-actions">
+          ${
+            hasReceipt
+              ? `<a class="btn small receipt-btn" href="${escapeAttr(r.receiptUrl)}" target="_blank" rel="noopener">📷 צפה בקבלה</a>`
+              : `<span class="missing-receipt">אין קבלה</span>`
+          }
         </div>
       </div>
 
-      <div>
-        <div style="margin-bottom:8px;text-align:left">
-          <span class="badge ${r.status || 'new'}">${statusLabel(r.status)}</span>
-        </div>
+      ${
+        actions
+          ? `
+            <div class="status-actions">
+              <button class="btn small primary" data-status-id="${r.id}" data-status="confirmed">אשר</button>
+              <button class="btn small" data-status-id="${r.id}" data-status="arrived">הגיע</button>
+              <button class="btn small" data-status-id="${r.id}" data-status="done">סיים</button>
+              <button class="btn small danger" data-status-id="${r.id}" data-status="cancelled">בטל</button>
+            </div>
+          `
+          : ''
+      }
 
-        ${actions ? `
-          <div class="status-actions">
-            <button class="btn small primary" data-status-id="${r.id}" data-status="confirmed">אושר</button>
-            <button class="btn small" data-status-id="${r.id}" data-status="arrived">הגיע</button>
-            <button class="btn small" data-status-id="${r.id}" data-status="done">סיים</button>
-            <button class="btn small danger" data-status-id="${r.id}" data-status="cancelled">בוטל</button>
-          </div>
-        ` : ''}
-      </div>
     </div>
   `;
 }
