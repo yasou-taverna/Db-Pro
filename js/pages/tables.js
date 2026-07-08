@@ -5,6 +5,7 @@ import { statusLabel } from '../components/reservation-card.js';
 
 let reservations = [];
 let selectedDate = todayISO();
+let selectedTableId = null;
 
 const TABLES = [
   { id:'25', seats:8, area:'outside', left:'14%', top:'68%', w:142, h:62 },
@@ -49,7 +50,7 @@ export function render() {
         <div class="topbar">
           <div>
             <h2>ניהול שולחנות</h2>
-            <p>לחיצה על שולחן מציגה את פרטי ההזמנה</p>
+            <p>מפת שולחנות חיה לפי ההזמנות בגיליון</p>
           </div>
 
           <div class="actions">
@@ -84,18 +85,28 @@ export function render() {
 }
 
 export async function init() {
-  document.getElementById('refreshTablesBtn').onclick = refresh;
+  const refreshBtn = document.getElementById('refreshTablesBtn');
+  const dateInput = document.getElementById('tablesDate');
 
-  document.getElementById('tablesDate').onchange = async (e) => {
+  refreshBtn.onclick = refresh;
+
+  dateInput.onchange = async (e) => {
     selectedDate = e.target.value;
+    selectedTableId = null;
     await refresh();
   };
 
+  drawTables();
   await refresh();
 }
 
 async function refresh() {
-  drawTables();
+  const btn = document.getElementById('refreshTablesBtn');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'טוען...';
+  }
 
   try {
     reservations = await loadReservations();
@@ -105,6 +116,15 @@ async function refresh() {
   }
 
   drawTables();
+
+  if (selectedTableId) {
+    showTable(selectedTableId);
+  }
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'רענון';
+  }
 }
 
 function zone(area, title) {
@@ -128,26 +148,31 @@ function drawTables() {
   });
 
   document.querySelectorAll('.table-button').forEach(btn => {
-    btn.onclick = () => showTable(btn.dataset.tableId);
+    btn.onclick = () => {
+      selectedTableId = btn.dataset.tableId;
+      showTable(selectedTableId);
+    };
   });
 }
 
-function tableButton(t) {
-  const reservation = getTableReservation(t.id);
+function tableButton(table) {
+  const reservation = getTableReservation(table.id);
   const status = getTableStatus(reservation);
 
   const title = reservation
-    ? `שולחן ${t.id}, ${t.seats} מקומות, ${reservation.customerName || 'ללא שם'}`
-    : `שולחן ${t.id}, ${t.seats} מקומות, פנוי`;
+    ? `שולחן ${table.id}, ${table.seats} מקומות, ${reservation.customerName || 'ללא שם'}`
+    : `שולחן ${table.id}, ${table.seats} מקומות, פנוי`;
+
+  const activeClass = String(selectedTableId) === String(table.id) ? 'selected-table' : '';
 
   return `
     <button
-      class="table-button ${status} ${t.round ? 'round' : ''}"
-      style="left:${t.left};top:${t.top};--w:${t.w};--h:${t.h}"
-      data-table-id="${t.id}"
-      data-number="${t.id}"
+      class="table-button ${status} ${table.round ? 'round' : ''} ${activeClass}"
+      style="left:${table.left};top:${table.top};--w:${table.w};--h:${table.h}"
+      data-table-id="${escapeAttr(table.id)}"
+      data-number="${escapeAttr(table.id)}"
       title="${escapeAttr(title)}">
-      ${t.seats}
+      ${table.seats}
     </button>
   `;
 }
@@ -174,25 +199,32 @@ function showTable(tableId) {
 
   if (!box) return;
 
-  if (!reservation) {
+  if (!table) {
     box.className = 'empty';
+    box.innerHTML = 'השולחן לא נמצא';
+    return;
+  }
+
+  if (!reservation) {
+    box.className = '';
     box.innerHTML = `
       <div class="table-detail-card">
-        <h3>שולחן ${tableId}</h3>
-        <p>${table?.seats || '-'} מקומות · ${AREA_NAMES[table?.area] || table?.area || '-'}</p>
+        <h3>שולחן ${escapeHtml(tableId)}</h3>
+        <p>${table.seats} מקומות · ${AREA_NAMES[table.area] || table.area || '-'}</p>
         <div class="empty">אין הזמנה פעילה לשולחן זה בתאריך ${selectedDate}</div>
       </div>
     `;
+    drawTables();
     return;
   }
 
   box.className = '';
   box.innerHTML = `
     <div class="table-detail-card">
-      <h3>שולחן ${tableId} · ${escapeHtml(reservation.customerName || 'ללא שם')}</h3>
+      <h3>שולחן ${escapeHtml(tableId)} · ${escapeHtml(reservation.customerName || 'ללא שם')}</h3>
 
       <p>
-        🕗 ${reservation.time || '-'} ·
+        🕗 ${escapeHtml(reservation.time || '-')} ·
         👥 ${reservation.guests || 0} סועדים ·
         📞 ${escapeHtml(reservation.phone || '-')}
       </p>
@@ -223,217 +255,28 @@ function showTable(tableId) {
       btn.disabled = true;
       btn.textContent = 'מעדכן...';
 
-      await updateReservationStatus(reservation.id, newStatus);
+      try {
+        await updateReservationStatus(reservation.id, newStatus);
+        reservations = await loadReservations();
+        drawTables();
 
-      reservations = await loadReservations();
-      drawTables();
-      showTable(tableId);
-    };
-  });
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, s => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  }[s]));
-}
-
-function escapeAttr(str) {
-  return escapeHtml(str);
-}  { id:'14', seats:4, area:'inside', left:'78%', top:'14%', w:74, h:58 },
-  { id:'15', seats:2, area:'inside', left:'94%', top:'58%', w:58, h:58 },
-  { id:'16', seats:2, area:'inside', left:'94%', top:'36%', w:58, h:58 },
-  { id:'17', seats:2, area:'inside', left:'94%', top:'14%', w:58, h:58 }
-];
-
-export function render() {
-  return `
-    <div class="app-shell">
-      ${sidebar('tables')}
-
-      <main class="main">
-        <div class="topbar">
-          <div>
-            <h2>ניהול שולחנות</h2>
-            <p>לחיצה על שולחן פותחת הזמנה חדשה או פרטי הזמנה קיימת</p>
-          </div>
-
-          <div class="actions">
-            <input id="tablesDate" class="compact-date-input" type="date" value="${selectedDate}">
-            <button class="btn primary" id="refreshTablesBtn">רענון</button>
-          </div>
-        </div>
-
-        <section class="panel">
-          <div class="legend">
-            <span><i class="dot free"></i>פנוי</span>
-            <span><i class="dot reserved"></i>שמור</span>
-            <span><i class="dot occupied"></i>תפוס / הגיע</span>
-          </div>
-
-          <div class="map-wrap">
-            <div class="floor-map">
-              ${zone('outside', 'מתחם חיצוני')}
-              ${zone('covered', 'מתחם מקורה')}
-              ${zone('inside', 'מתחם פנימי')}
-            </div>
-          </div>
-        </section>
-
-        <section class="panel" style="margin-top:16px">
-          <h3>פרטי שולחן</h3>
-          <div id="tableDetails" class="empty">בחר שולחן מהמפה</div>
-        </section>
-      </main>
-    </div>
-  `;
-}
-
-export async function init() {
-  document.getElementById('refreshTablesBtn').onclick = refresh;
-
-  document.getElementById('tablesDate').onchange = async (e) => {
-    selectedDate = e.target.value;
-    await refresh();
-  };
-
-  await refresh();
-}
-
-async function refresh() {
-  reservations = await loadReservations();
-  drawTables();
-}
-
-function zone(area, title) {
-  return `
-    <section class="zone ${area}">
-      <h3>${title}</h3>
-      <div class="tables-layer" data-zone="${area}"></div>
-    </section>
-  `;
-}
-
-function drawTables() {
-  ['outside', 'covered', 'inside'].forEach(area => {
-    const layer = document.querySelector(`[data-zone="${area}"]`);
-    if (!layer) return;
-
-    layer.innerHTML = TABLES
-      .filter(t => t.area === area)
-      .map(tableButton)
-      .join('');
-  });
-
-  document.querySelectorAll('.table-button').forEach(btn => {
-    btn.onclick = () => showTable(btn.dataset.tableId);
-  });
-}
-
-function tableButton(t) {
-  const reservation = getTableReservation(t.id);
-  const status = getTableStatus(reservation);
-  const title = reservation
-    ? `שולחן ${t.id}, ${t.seats} מקומות, ${reservation.customerName || 'ללא שם'}`
-    : `שולחן ${t.id}, ${t.seats} מקומות, פנוי`;
-
-  return `
-    <button
-      class="table-button ${status} ${t.round ? 'round' : ''}"
-      style="left:${t.left};top:${t.top};--w:${t.w};--h:${t.h}"
-      data-table-id="${t.id}"
-      data-number="${t.id}"
-      title="${escapeAttr(title)}">
-      ${t.seats}
-    </button>
-  `;
-}
-
-function getTableReservation(tableId) {
-  return reservations.find(r =>
-    String(r.tableId) === String(tableId) &&
-    r.date === selectedDate &&
-    r.status !== 'cancelled' &&
-    r.status !== 'done'
-  );
-}
-
-function getTableStatus(reservation) {
-  if (!reservation) return 'free';
-  if (reservation.status === 'arrived') return 'occupied';
-  return 'reserved';
-}
-
-function showTable(tableId) {
-  const table = TABLES.find(t => String(t.id) === String(tableId));
-  const reservation = getTableReservation(tableId);
-  const box = document.getElementById('tableDetails');
-
-  if (!reservation) {
-    box.innerHTML = `
-      <div class="table-detail-card">
-        <h3>שולחן ${tableId}</h3>
-        <p>${table?.seats || '-'} מקומות · ${AREA_NAMES[table?.area] || table?.area || '-'}</p>
-        <div class="empty">אין הזמנה פעילה לשולחן זה בתאריך ${selectedDate}</div>
-      </div>
-    `;
-    return;
-  }
-
-  box.innerHTML = `
-    <div class="table-detail-card">
-      <h3>שולחן ${tableId} · ${escapeHtml(reservation.customerName || 'ללא שם')}</h3>
-
-      <p>
-        🕗 ${reservation.time || '-'} ·
-        👥 ${reservation.guests || 0} סועדים ·
-        📞 ${escapeHtml(reservation.phone || '-')}
-      </p>
-
-      <p>
-        🏛️ ${AREA_NAMES[reservation.area] || reservation.area || '-'} ·
-        סטטוס: <strong>${statusLabel(reservation.status)}</strong>
-      </p>
-
-      <div class="split-actions">
-        <button class="btn primary" data-action-status="confirmed">אשר</button>
-        <button class="btn" data-action-status="arrived">הגיע</button>
-        <button class="btn" data-action-status="done">סיים</button>
-        <button class="btn danger" data-action-status="cancelled">בטל</button>
-
-        ${
-          reservation.receiptUrl
-            ? `<a class="btn" href="${escapeAttr(reservation.receiptUrl)}" target="_blank" rel="noopener">📷 קבלה</a>`
-            : ''
+        if (newStatus === 'done' || newStatus === 'cancelled') {
+          showTable(tableId);
+        } else {
+          showTable(tableId);
         }
-      </div>
-    </div>
-  `;
-
-  document.querySelectorAll('[data-action-status]').forEach(btn => {
-    btn.onclick = async () => {
-      const newStatus = btn.dataset.actionStatus;
-
-      btn.disabled = true;
-      btn.textContent = 'מעדכן...';
-
-      await updateReservationStatus(reservation.id, newStatus);
-
-      reservations = await loadReservations();
-      drawTables();
-
-      if (newStatus === 'done' || newStatus === 'cancelled') {
-        showTable(tableId);
-      } else {
-        showTable(tableId);
+      } catch (err) {
+        console.error('Status update error:', err);
+        alert('אירעה שגיאה בעדכון הסטטוס');
+        btn.disabled = false;
+        btn.textContent = 'נסה שוב';
       }
     };
   });
+
+  drawTables();
 }
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, s => ({
     '&': '&amp;',
