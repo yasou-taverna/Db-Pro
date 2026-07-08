@@ -434,3 +434,16 @@ function showTable(tableId) {
     };
   });
 }
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, s => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[s]));
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str);
+}
