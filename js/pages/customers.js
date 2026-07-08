@@ -38,7 +38,6 @@ export function render() {
                   <th>סוג לקוח</th>
                 </tr>
               </thead>
-
               <tbody id="customersBody">
                 <tr>
                   <td colspan="6" class="empty">טוען...</td>
@@ -55,7 +54,6 @@ export function render() {
 export async function init() {
   document.getElementById('refreshBtn').onclick = refresh;
   document.getElementById('customerSearch').oninput = applySearch;
-
   await refresh();
 }
 
@@ -107,14 +105,13 @@ function buildCustomers(rows) {
     map.set(key, current);
   });
 
-  return [...map.values()].sort((a, b) => {
-    return `${b.lastDate} ${b.lastTime}`.localeCompare(`${a.lastDate} ${a.lastTime}`);
-  });
+  return [...map.values()].sort((a, b) =>
+    `${b.lastDate} ${b.lastTime}`.localeCompare(`${a.lastDate} ${a.lastTime}`)
+  );
 }
 
 function applySearch() {
   const q = document.getElementById('customerSearch').value.trim();
-
   let customers = [...allCustomers];
 
   if (q) {
@@ -139,7 +136,7 @@ function renderCustomers(customers) {
   }
 
   body.innerHTML = customers.map(c => {
-    const type = c.visits >= 3 ? 'VIP' : 'לקוח';
+    const isVip = c.visits >= 3;
 
     return `
       <tr>
@@ -148,7 +145,11 @@ function renderCustomers(customers) {
         <td>${c.visits}</td>
         <td>${c.guests}</td>
         <td>${c.lastDate || '-'} ${c.lastTime || ''}</td>
-        <td><span class="badge ${c.visits >= 3 ? 'confirmed' : 'new'}">${type}</span></td>
+        <td>
+          <span class="badge ${isVip ? 'confirmed' : 'new'}">
+            ${isVip ? 'VIP' : 'לקוח'}
+          </span>
+        </td>
       </tr>
     `;
   }).join('');
@@ -166,7 +167,4 @@ function escapeHtml(str) {
     '"': '&quot;',
     "'": '&#039;'
   }[s]));
-}      <span class="badge confirmed">${c.visits >= 3 ? 'VIP' : 'לקוח'}</span>
-    </div>
-  `).join('') : '<div class="empty">אין לקוחות עדיין</div>';
 }
