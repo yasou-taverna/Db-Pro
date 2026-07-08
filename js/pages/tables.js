@@ -176,7 +176,7 @@ function showTable(tableId) {
 
   box.innerHTML = `
     <div class="table-detail-card">
-      <h3>שולחן ${tableId} · ${reservation.customerName || 'ללא שם'}</h3>
+      <h3>שולחן ${tableId} · ${escapeHtml(reservation.customerName || 'ללא שם')}</h3>
 
       <p>
         🕗 ${reservation.time || '-'} ·
@@ -190,10 +190,11 @@ function showTable(tableId) {
       </p>
 
       <div class="split-actions">
-        <button class="btn primary" data-table-action="confirmed">אשר</button>
-        <button class="btn" data-table-action="arrived">הגיע</button>
-        <button class="btn" data-table-action="done">סיים</button>
-        <button class="btn danger" data-table-action="cancelled">בטל</button>
+        <button class="btn primary" data-action-status="confirmed">אשר</button>
+        <button class="btn" data-action-status="arrived">הגיע</button>
+        <button class="btn" data-action-status="done">סיים</button>
+        <button class="btn danger" data-action-status="cancelled">בטל</button>
+
         ${
           reservation.receiptUrl
             ? `<a class="btn" href="${escapeAttr(reservation.receiptUrl)}" target="_blank" rel="noopener">📷 קבלה</a>`
@@ -203,25 +204,23 @@ function showTable(tableId) {
     </div>
   `;
 
-  document.querySelectorAll('[data-table-action]').forEach(btn => {
+  document.querySelectorAll('[data-action-status]').forEach(btn => {
     btn.onclick = async () => {
-      await updateReservationStatus(reservation.id, btn.dataset.tableAction);
-      await refresh();
-      showTable(tableId);
+      const newStatus = btn.dataset.actionStatus;
+
+      btn.disabled = true;
+      btn.textContent = 'מעדכן...';
+
+      await updateReservationStatus(reservation.id, newStatus);
+
+      reservations = await loadReservations();
+      drawTables();
+
+      if (newStatus === 'done' || newStatus === 'cancelled') {
+        showTable(tableId);
+      } else {
+        showTable(tableId);
+      }
     };
   });
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, s => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  }[s]));
-}
-
-function escapeAttr(str) {
-  return escapeHtml(str);
 }
