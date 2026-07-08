@@ -3,6 +3,8 @@ export function sidebar(active = 'dashboard') {
   const items = [
     ['dashboard', '📊', 'דשבורד'],
     ['reservations', '📒', 'הזמנות'],
+    ['tables', '🪑', 'מפת שולחנות'],
+    ['calendar', '📅', 'יומן'],
     ['kitchen', '🍽️', 'עומס מטבח'],
     ['customers', '👥', 'לקוחות'],
     ['settings', '⚙️', 'הגדרות']
