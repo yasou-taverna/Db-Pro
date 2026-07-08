@@ -49,6 +49,216 @@ export function render() {
         <div class="topbar">
           <div>
             <h2>ניהול שולחנות</h2>
+            <p>לחיצה על שולחן מציגה את פרטי ההזמנה</p>
+          </div>
+
+          <div class="actions">
+            <input id="tablesDate" class="compact-date-input" type="date" value="${selectedDate}">
+            <button class="btn primary" id="refreshTablesBtn">רענון</button>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="legend">
+            <span><i class="dot free"></i>פנוי</span>
+            <span><i class="dot reserved"></i>שמור</span>
+            <span><i class="dot occupied"></i>תפוס</span>
+          </div>
+
+          <div class="map-wrap">
+            <div class="floor-map">
+              ${zone('outside', 'מתחם חיצוני')}
+              ${zone('covered', 'מתחם מקורה')}
+              ${zone('inside', 'מתחם פנימי')}
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top:16px">
+          <h3>פרטי שולחן</h3>
+          <div id="tableDetails" class="empty">בחר שולחן מהמפה</div>
+        </section>
+      </main>
+    </div>
+  `;
+}
+
+export async function init() {
+  document.getElementById('refreshTablesBtn').onclick = refresh;
+
+  document.getElementById('tablesDate').onchange = async (e) => {
+    selectedDate = e.target.value;
+    await refresh();
+  };
+
+  await refresh();
+}
+
+async function refresh() {
+  drawTables();
+
+  try {
+    reservations = await loadReservations();
+  } catch (err) {
+    console.error('Tables load error:', err);
+    reservations = [];
+  }
+
+  drawTables();
+}
+
+function zone(area, title) {
+  return `
+    <section class="zone ${area}">
+      <h3>${title}</h3>
+      <div class="tables-layer" data-zone="${area}"></div>
+    </section>
+  `;
+}
+
+function drawTables() {
+  ['outside', 'covered', 'inside'].forEach(area => {
+    const layer = document.querySelector(`[data-zone="${area}"]`);
+    if (!layer) return;
+
+    layer.innerHTML = TABLES
+      .filter(t => t.area === area)
+      .map(tableButton)
+      .join('');
+  });
+
+  document.querySelectorAll('.table-button').forEach(btn => {
+    btn.onclick = () => showTable(btn.dataset.tableId);
+  });
+}
+
+function tableButton(t) {
+  const reservation = getTableReservation(t.id);
+  const status = getTableStatus(reservation);
+
+  const title = reservation
+    ? `שולחן ${t.id}, ${t.seats} מקומות, ${reservation.customerName || 'ללא שם'}`
+    : `שולחן ${t.id}, ${t.seats} מקומות, פנוי`;
+
+  return `
+    <button
+      class="table-button ${status} ${t.round ? 'round' : ''}"
+      style="left:${t.left};top:${t.top};--w:${t.w};--h:${t.h}"
+      data-table-id="${t.id}"
+      data-number="${t.id}"
+      title="${escapeAttr(title)}">
+      ${t.seats}
+    </button>
+  `;
+}
+
+function getTableReservation(tableId) {
+  return reservations.find(r =>
+    String(r.tableId) === String(tableId) &&
+    r.date === selectedDate &&
+    r.status !== 'cancelled' &&
+    r.status !== 'done'
+  );
+}
+
+function getTableStatus(reservation) {
+  if (!reservation) return 'free';
+  if (reservation.status === 'arrived') return 'occupied';
+  return 'reserved';
+}
+
+function showTable(tableId) {
+  const table = TABLES.find(t => String(t.id) === String(tableId));
+  const reservation = getTableReservation(tableId);
+  const box = document.getElementById('tableDetails');
+
+  if (!box) return;
+
+  if (!reservation) {
+    box.className = 'empty';
+    box.innerHTML = `
+      <div class="table-detail-card">
+        <h3>שולחן ${tableId}</h3>
+        <p>${table?.seats || '-'} מקומות · ${AREA_NAMES[table?.area] || table?.area || '-'}</p>
+        <div class="empty">אין הזמנה פעילה לשולחן זה בתאריך ${selectedDate}</div>
+      </div>
+    `;
+    return;
+  }
+
+  box.className = '';
+  box.innerHTML = `
+    <div class="table-detail-card">
+      <h3>שולחן ${tableId} · ${escapeHtml(reservation.customerName || 'ללא שם')}</h3>
+
+      <p>
+        🕗 ${reservation.time || '-'} ·
+        👥 ${reservation.guests || 0} סועדים ·
+        📞 ${escapeHtml(reservation.phone || '-')}
+      </p>
+
+      <p>
+        🏛️ ${AREA_NAMES[reservation.area] || reservation.area || '-'} ·
+        סטטוס: <strong>${statusLabel(reservation.status)}</strong>
+      </p>
+
+      <div class="split-actions">
+        <button class="btn primary" data-action-status="confirmed">אשר</button>
+        <button class="btn" data-action-status="arrived">הגיע</button>
+        <button class="btn" data-action-status="done">סיים</button>
+        <button class="btn danger" data-action-status="cancelled">בטל</button>
+        ${
+          reservation.receiptUrl
+            ? `<a class="btn" href="${escapeAttr(reservation.receiptUrl)}" target="_blank" rel="noopener">📷 קבלה</a>`
+            : ''
+        }
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll('[data-action-status]').forEach(btn => {
+    btn.onclick = async () => {
+      const newStatus = btn.dataset.actionStatus;
+
+      btn.disabled = true;
+      btn.textContent = 'מעדכן...';
+
+      await updateReservationStatus(reservation.id, newStatus);
+
+      reservations = await loadReservations();
+      drawTables();
+      showTable(tableId);
+    };
+  });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, s => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[s]));
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str);
+}  { id:'14', seats:4, area:'inside', left:'78%', top:'14%', w:74, h:58 },
+  { id:'15', seats:2, area:'inside', left:'94%', top:'58%', w:58, h:58 },
+  { id:'16', seats:2, area:'inside', left:'94%', top:'36%', w:58, h:58 },
+  { id:'17', seats:2, area:'inside', left:'94%', top:'14%', w:58, h:58 }
+];
+
+export function render() {
+  return `
+    <div class="app-shell">
+      ${sidebar('tables')}
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <h2>ניהול שולחנות</h2>
             <p>לחיצה על שולחן פותחת הזמנה חדשה או פרטי הזמנה קיימת</p>
           </div>
 
