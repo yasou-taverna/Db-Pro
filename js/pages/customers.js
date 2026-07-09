@@ -36,11 +36,12 @@ export function render() {
                   <th>סך סועדים</th>
                   <th>הזמנה אחרונה</th>
                   <th>סוג לקוח</th>
+                  <th>WhatsApp</th>
                 </tr>
               </thead>
               <tbody id="customersBody">
                 <tr>
-                  <td colspan="6" class="empty">טוען...</td>
+                  <td colspan="7" class="empty">טוען...</td>
                 </tr>
               </tbody>
             </table>
@@ -129,7 +130,7 @@ function renderCustomers(customers) {
   if (!customers.length) {
     body.innerHTML = `
       <tr>
-        <td colspan="6" class="empty">לא נמצאו לקוחות</td>
+        <td colspan="7" class="empty">לא נמצאו לקוחות</td>
       </tr>
     `;
     return;
@@ -137,6 +138,7 @@ function renderCustomers(customers) {
 
   body.innerHTML = customers.map(c => {
     const isVip = c.visits >= 3;
+    const wa = whatsappLink(c.phone);
 
     return `
       <tr>
@@ -150,9 +152,29 @@ function renderCustomers(customers) {
             ${isVip ? 'VIP' : 'לקוח'}
           </span>
         </td>
+        <td>
+          ${
+            wa
+              ? `<a class="btn small" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>`
+              : '-'
+          }
+        </td>
       </tr>
     `;
   }).join('');
+}
+
+function whatsappLink(phone) {
+  const clean = normalizePhone(phone);
+  if (!clean) return '';
+
+  let number = clean;
+
+  if (number.startsWith('0')) {
+    number = '972' + number.slice(1);
+  }
+
+  return `https://wa.me/${number}`;
 }
 
 function normalizePhone(phone) {
