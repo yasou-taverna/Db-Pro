@@ -1,5 +1,5 @@
 const SHEET_NAME = 'Reservations';
-const RECEIPTS_FOLDER_ID = '1AAOvUdB-wN7Z9eIYCx6neAiHiekL_LGZ';
+const SPREADSHEET_ID = '1Uka-GKc8ru8ZGcbIBK5ibXTGNhUs9fLdSuQsJT_W-90';
 
 const TABLES = [
   { id:'1', area:'inside', seats:4 }, { id:'2', area:'inside', seats:4 },
