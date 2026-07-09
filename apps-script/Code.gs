@@ -31,18 +31,6 @@ const TABLES = [
 
 const AREA_ORDER = ['inside', 'covered', 'outside'];
 
-function getSheet() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sheet = ss.getSheetByName(SHEET_NAME);
-
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-  }
-
-  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-  return sheet;
-}
-
 function doGet(e) {
   const action = e.parameter.action;
 
@@ -66,10 +54,21 @@ function doPost(e) {
     }
 
     return json({ ok: false, error: 'Unknown action' });
-
   } catch (err) {
     return json({ ok: false, error: String(err), stack: err.stack || '' });
   }
+}
+
+function getSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+
+  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  return sheet;
 }
 
 function addReservation(r) {
@@ -78,7 +77,7 @@ function addReservation(r) {
 
   try {
     const sheet = getSheet();
-    const existing = getReservations();
+    const existingReservations = getReservations();
 
     const date = normalizeDate(r.date);
     const guests = Number(r.guests || 0);
@@ -86,7 +85,7 @@ function addReservation(r) {
     const assigned = assignTable({
       date,
       guests,
-      existingReservations: existing
+      existingReservations
     });
 
     let receiptUrl = '';
@@ -94,7 +93,7 @@ function addReservation(r) {
       receiptUrl = saveReceiptToDrive(r);
     }
 
-    const row = {
+    const reservation = {
       id: r.id || 'r' + Date.now(),
       customerName: r.customerName || '',
       phone: r.phone || '',
@@ -112,10 +111,9 @@ function addReservation(r) {
       receiptUrl
     };
 
-    sheet.appendRow(HEADERS.map(h => row[h] || ''));
+    sheet.appendRow(HEADERS.map(h => reservation[h] || ''));
 
-    return { ok: true, reservation: row };
-
+    return { ok: true, reservation };
   } finally {
     lock.releaseLock();
   }
@@ -204,9 +202,7 @@ function saveReceiptToDrive(r) {
       .replace(';base64', '');
 
     const bytes = Utilities.base64Decode(base64);
-
-    const safeName =
-      `${r.date || 'date'}_${r.time || 'time'}_${r.customerName || 'customer'}_${r.receiptFileName || 'receipt.jpg'}`;
+    const safeName = `${r.date || 'date'}_${r.time || 'time'}_${r.customerName || 'customer'}_${r.receiptFileName || 'receipt.jpg'}`;
 
     const blob = Utilities.newBlob(bytes, contentType, safeName);
     const file = folder.createFile(blob);
@@ -214,7 +210,6 @@ function saveReceiptToDrive(r) {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
     return file.getUrl();
-
   } catch (err) {
     return '';
   }
@@ -263,4 +258,3 @@ function json(data) {
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
-
