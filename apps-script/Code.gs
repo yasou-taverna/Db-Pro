@@ -1,17 +1,42 @@
 const SHEET_NAME = 'Reservations';
-
-// אם אתה רוצה לשמור קבלות ב-Google Drive,
-// צור תיקייה בדרייב, העתק את ה-ID שלה, והדבק כאן.
-// בינתיים אפשר להשאיר ריק.
 const RECEIPTS_FOLDER_ID = '1AAOvUdB-wN7Z9eIYCx6neAiHiekL_LGZ';
+
+const TABLES = [
+  { id:'1', area:'inside', seats:4 }, { id:'2', area:'inside', seats:4 },
+  { id:'3', area:'inside', seats:4 }, { id:'4', area:'inside', seats:4 },
+  { id:'5', area:'inside', seats:4 }, { id:'6', area:'inside', seats:4 },
+  { id:'7', area:'inside', seats:6 }, { id:'8', area:'inside', seats:2 },
+  { id:'9', area:'inside', seats:4 }, { id:'10', area:'inside', seats:4 },
+  { id:'11', area:'inside', seats:4 }, { id:'12', area:'inside', seats:4 },
+  { id:'13', area:'inside', seats:4 }, { id:'14', area:'inside', seats:4 },
+  { id:'15', area:'inside', seats:2 }, { id:'16', area:'inside', seats:2 },
+  { id:'17', area:'inside', seats:2 },
+
+  { id:'18', area:'covered', seats:6 }, { id:'19', area:'covered', seats:10 },
+  { id:'20', area:'covered', seats:6 }, { id:'21', area:'covered', seats:8 },
+  { id:'22', area:'covered', seats:12 }, { id:'23', area:'covered', seats:12 },
+  { id:'24', area:'covered', seats:8 },
+
+  { id:'25', area:'outside', seats:8 }, { id:'26', area:'outside', seats:8 },
+  { id:'27', area:'outside', seats:8 }, { id:'28', area:'outside', seats:8 },
+  { id:'29', area:'outside', seats:8 }
+];
+
+const TIME_TO_AREA = {
+  '20:00':'inside',
+  '20:05':'inside',
+  '20:10':'inside',
+  '20:30':'covered',
+  '20:35':'covered',
+  '21:00':'outside',
+  '21:05':'outside',
+  '21:10':'outside',
+  '21:15':'outside'
+};
 
 function doGet(e) {
   const action = e.parameter.action;
-
-  if (action === 'getReservations') {
-    return json(getReservations());
-  }
-
+  if (action === 'getReservations') return json(getReservations());
   return json({ ok: true, message: 'YASOU API is running' });
 }
 
@@ -30,40 +55,90 @@ function doPost(e) {
 }
 
 function addReservation(r) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
 
-  let receiptUrl = '';
+  try {
+    const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
 
-  if (r.receiptImageBase64) {
-    receiptUrl = saveReceiptToDrive(r);
-  }
+    const time = normalizeTime(r.time);
+    const area = r.area || TIME_TO_AREA[time] || '';
+    const guests = Number(r.guests || 0);
 
-  sheet.appendRow([
-    r.id || '',
-    r.customerName || '',
-    r.phone || '',
-    r.date || '',
-    r.time || '',
-    r.guests || '',
-    r.area || '',
-    r.tableId || '',
-    r.status || 'new',
-    r.notes || '',
-    r.depositStatus || 'pending',
-    r.reservationType || 'private',
-    r.source || 'public-booking',
-    r.createdAt || new Date().toISOString(),
-    r.receiptFileName || '',
-    receiptUrl || ''
-  ]);
+    const existingReservations = getReservations();
 
-  return {
-    ok: true,
-    reservation: {
-      ...r,
-      receiptUrl
+    const assignedTableId = assignTable({
+      area,
+      guests,
+      date: r.date,
+      existingReservations
+    });
+
+    const finalStatus = assignedTableId ? (r.status || 'new') : 'waiting';
+
+    let receiptUrl = '';
+
+    if (r.receiptImageBase64) {
+      receiptUrl = saveReceiptToDrive(r);
     }
-  };
+
+    const finalReservation = {
+      ...r,
+      time,
+      area,
+      tableId: assignedTableId,
+      status: finalStatus,
+      receiptUrl
+    };
+
+    sheet.appendRow([
+      finalReservation.id || '',
+      finalReservation.customerName || '',
+      finalReservation.phone || '',
+      finalReservation.date || '',
+      finalReservation.time || '',
+      finalReservation.guests || '',
+      finalReservation.area || '',
+      finalReservation.tableId || '',
+      finalReservation.status || 'new',
+      finalReservation.notes || '',
+      finalReservation.depositStatus || 'pending',
+      finalReservation.reservationType || 'private',
+      finalReservation.source || 'public-booking',
+      finalReservation.createdAt || new Date().toISOString(),
+      finalReservation.receiptFileName || '',
+      receiptUrl || ''
+    ]);
+
+    return {
+      ok: true,
+      reservation: finalReservation
+    };
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function assignTable({ area, guests, date, existingReservations }) {
+  const taken = new Set(
+    existingReservations
+      .filter(r =>
+        String(r.date || '') === String(date || '') &&
+        String(r.area || '') === String(area || '') &&
+        !['cancelled', 'done'].includes(String(r.status || 'new')) &&
+        String(r.tableId || '')
+      )
+      .map(r => String(r.tableId))
+  );
+
+  const candidates = TABLES
+    .filter(t => t.area === area)
+    .filter(t => Number(t.seats) >= Number(guests))
+    .filter(t => !taken.has(String(t.id)))
+    .sort((a, b) => Number(a.seats) - Number(b.seats) || Number(a.id) - Number(b.id));
+
+  return candidates[0]?.id || '';
 }
 
 function saveReceiptToDrive(r) {
@@ -81,7 +156,6 @@ function saveReceiptToDrive(r) {
     const bytes = Utilities.base64Decode(base64);
 
     const safeName = `${r.date || 'date'}_${r.time || 'time'}_${r.customerName || 'customer'}_${r.receiptFileName || 'receipt.jpg'}`;
-
     const blob = Utilities.newBlob(bytes, contentType, safeName);
 
     const file = folder.createFile(blob);
@@ -129,6 +203,24 @@ function updateReservationStatus(id, status) {
   }
 
   return { ok: false, error: 'Reservation not found' };
+}
+
+function normalizeTime(value) {
+  const str = String(value || '');
+  if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
+
+  if (str.includes('T')) {
+    const d = new Date(str);
+    return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
+  }
+
+  return str.slice(0, 5);
+}
+
+function json(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function json(data) {
