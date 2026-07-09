@@ -155,7 +155,7 @@ function renderCustomers(customers) {
         <td>
           ${
             wa
-              ? `<a class="btn small" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>`
+              ? `<a class="btn small whatsapp" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>`
               : '-'
           }
         </td>
