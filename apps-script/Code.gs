@@ -1,6 +1,12 @@
 const SHEET_NAME = 'Reservations';
-const SPREADSHEET_ID = '1TPC1A9OF0s_44lHn5hBahmIEmg10KPwPCiTXeLf68bI';
+const SPREADSHEET_ID = '1Xu3YipJx_i1oHmkPPKkwfqlzFKPc7bYenHY7dvc2xNA';
 const RECEIPTS_FOLDER_ID = '1AAOvUdB-wN7Z9eIYCx6neAiHiekL_LGZ';
+
+const HEADERS = [
+  'id','customerName','phone','date','time','guests','area','tableId',
+  'status','depositStatus','reservationType','source','createdAt',
+  'receiptFileName','receiptUrl'
+];
 
 const TABLES = [
   { id:'1', area:'inside', seats:4 }, { id:'2', area:'inside', seats:4 },
@@ -25,24 +31,6 @@ const TABLES = [
 
 const AREA_ORDER = ['inside', 'covered', 'outside'];
 
-const HEADERS = [
-  'id',
-  'customerName',
-  'phone',
-  'date',
-  'time',
-  'guests',
-  'area',
-  'tableId',
-  'status',
-  'depositStatus',
-  'reservationType',
-  'source',
-  'createdAt',
-  'receiptFileName',
-  'receiptUrl'
-];
-
 function getSheet() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
@@ -51,13 +39,7 @@ function getSheet() {
     sheet = ss.insertSheet(SHEET_NAME);
   }
 
-  const firstRow = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-  const hasHeaders = firstRow.some(cell => String(cell || '').trim() !== '');
-
-  if (!hasHeaders) {
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-  }
-
+  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   return sheet;
 }
 
@@ -96,15 +78,15 @@ function addReservation(r) {
 
   try {
     const sheet = getSheet();
-    const existingReservations = getReservations();
+    const existing = getReservations();
 
+    const date = normalizeDate(r.date);
     const guests = Number(r.guests || 0);
-    const reservationDate = normalizeDate(r.date);
 
     const assigned = assignTable({
+      date,
       guests,
-      date: reservationDate,
-      existingReservations
+      existingReservations: existing
     });
 
     let receiptUrl = '';
@@ -112,11 +94,11 @@ function addReservation(r) {
       receiptUrl = saveReceiptToDrive(r);
     }
 
-    const finalReservation = {
+    const row = {
       id: r.id || 'r' + Date.now(),
       customerName: r.customerName || '',
       phone: r.phone || '',
-      date: reservationDate,
+      date,
       time: normalizeTime(r.time),
       guests,
       area: assigned.area || '',
@@ -130,64 +112,42 @@ function addReservation(r) {
       receiptUrl
     };
 
-    sheet.appendRow([
-      finalReservation.id,
-      finalReservation.customerName,
-      finalReservation.phone,
-      finalReservation.date,
-      finalReservation.time,
-      finalReservation.guests,
-      finalReservation.area,
-      finalReservation.tableId,
-      finalReservation.status,
-      finalReservation.depositStatus,
-      finalReservation.reservationType,
-      finalReservation.source,
-      finalReservation.createdAt,
-      finalReservation.receiptFileName,
-      finalReservation.receiptUrl
-    ]);
+    sheet.appendRow(HEADERS.map(h => row[h] || ''));
 
-    return { ok: true, reservation: finalReservation };
+    return { ok: true, reservation: row };
 
   } finally {
     lock.releaseLock();
   }
 }
 
-function assignTable({ guests, date, existingReservations }) {
+function assignTable({ date, guests, existingReservations }) {
   const activeStatuses = ['new', 'confirmed', 'arrived', 'waiting'];
-  const targetDate = normalizeDate(date);
+  const taken = new Set();
 
-  const taken = new Set(
-    existingReservations
-      .filter(r =>
-        normalizeDate(r.date) === targetDate &&
-        activeStatuses.includes(String(r.status || 'new')) &&
-        String(r.tableId || '')
-      )
-      .map(r => String(r.tableId))
-  );
+  existingReservations.forEach(r => {
+    if (
+      normalizeDate(r.date) === date &&
+      activeStatuses.includes(String(r.status || 'new')) &&
+      String(r.tableId || '')
+    ) {
+      taken.add(String(r.tableId));
+    }
+  });
 
   for (const area of AREA_ORDER) {
     const candidates = TABLES
       .filter(t => t.area === area)
-      .filter(t => Number(t.seats) >= Number(guests))
+      .filter(t => Number(t.seats) >= guests)
       .filter(t => !taken.has(String(t.id)))
       .sort((a, b) => Number(a.seats) - Number(b.seats) || Number(a.id) - Number(b.id));
 
     if (candidates.length) {
-      return {
-        area,
-        tableId: candidates[0].id
-      };
+      return { area, tableId: candidates[0].id };
     }
   }
 
-  return {
-    area: '',
-    tableId: ''
-  };
+  return { area: '', tableId: '' };
 }
 
 function getReservations() {
@@ -196,13 +156,15 @@ function getReservations() {
 
   if (values.length <= 1) return [];
 
-  const headers = values.shift();
+  const headers = values[0];
 
-  return values
+  return values.slice(1)
     .filter(row => row.some(cell => cell !== ''))
     .map(row => {
       const item = {};
-      headers.forEach((h, i) => item[h] = row[i]);
+      headers.forEach((h, i) => {
+        if (h) item[h] = row[i];
+      });
       return item;
     });
 }
@@ -279,9 +241,13 @@ function normalizeDate(value) {
 }
 
 function normalizeTime(value) {
-  const str = String(value || '');
+  if (!value) return '';
 
-  if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
+  const str = String(value);
+
+  if (/^\d{2}:\d{2}/.test(str)) {
+    return str.slice(0, 5);
+  }
 
   if (str.includes('T')) {
     const d = new Date(str);
@@ -297,3 +263,4 @@ function json(data) {
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
