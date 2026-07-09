@@ -1,5 +1,6 @@
 const SHEET_NAME = 'Reservations';
-const SPREADSHEET_ID = '1Uka-GKc8ru8ZGcbIBK5ibXTGNhUs9fLdSuQsJT_W-90';
+const SPREADSHEET_ID = '1rdWxn9lzp1uano5TnUzE6VTvTYP6b5r8f51ylMMhSwk';
+const RECEIPTS_FOLDER_ID = '1AAOvUdB-wN7Z9eIYCx6neAiHiekL_LGZ';
 
 const TABLES = [
   { id:'1', area:'inside', seats:4 }, { id:'2', area:'inside', seats:4 },
@@ -22,36 +23,39 @@ const TABLES = [
   { id:'29', area:'outside', seats:8 }
 ];
 
-const TIME_TO_AREA = {
-  '20:00':'inside',
-  '20:05':'inside',
-  '20:10':'inside',
-  '20:30':'covered',
-  '20:35':'covered',
-  '21:00':'outside',
-  '21:05':'outside',
-  '21:10':'outside',
-  '21:15':'outside'
-};
+const AREA_ORDER = ['inside', 'covered', 'outside'];
+
+function getSheet() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
+}
 
 function doGet(e) {
   const action = e.parameter.action;
-  if (action === 'getReservations') return json(getReservations());
+
+  if (action === 'getReservations') {
+    return json(getReservations());
+  }
+
   return json({ ok: true, message: 'YASOU API is running' });
 }
 
 function doPost(e) {
-  const body = JSON.parse(e.postData.contents || '{}');
+  try {
+    const body = JSON.parse(e.postData.contents || '{}');
 
-  if (body.action === 'addReservation') {
-    return json(addReservation(body));
+    if (body.action === 'addReservation') {
+      return json(addReservation(body));
+    }
+
+    if (body.action === 'updateReservationStatus') {
+      return json(updateReservationStatus(body.id, body.status));
+    }
+
+    return json({ ok: false, error: 'Unknown action' });
+
+  } catch (err) {
+    return json({ ok: false, error: String(err), stack: err.stack || '' });
   }
-
-  if (body.action === 'updateReservationStatus') {
-    return json(updateReservationStatus(body.id, body.status));
-  }
-
-  return json({ ok: false, error: 'Unknown action' });
 }
 
 function addReservation(r) {
@@ -59,132 +63,122 @@ function addReservation(r) {
   lock.waitLock(10000);
 
   try {
-    const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
-
-    const time = normalizeTime(r.time);
-    const area = r.area || TIME_TO_AREA[time] || '';
-    const guests = Number(r.guests || 0);
-
+    const sheet = getSheet();
     const existingReservations = getReservations();
 
-    const assignedTableId = assignTable({
-      area,
+    const guests = Number(r.guests || 0);
+    const reservationDate = normalizeDate(r.date);
+
+    const assigned = assignTable({
       guests,
-      date: r.date,
+      date: reservationDate,
       existingReservations
     });
 
-    const finalStatus = assignedTableId ? (r.status || 'new') : 'waiting';
-
     let receiptUrl = '';
-
     if (r.receiptImageBase64) {
       receiptUrl = saveReceiptToDrive(r);
     }
 
     const finalReservation = {
-      ...r,
-      time,
-      area,
-      tableId: assignedTableId,
-      status: finalStatus,
+      id: r.id || 'r' + Date.now(),
+      customerName: r.customerName || '',
+      phone: r.phone || '',
+      date: reservationDate,
+      time: normalizeTime(r.time),
+      guests,
+      area: assigned.area || '',
+      tableId: assigned.tableId || '',
+      status: assigned.tableId ? 'new' : 'waiting',
+      notes: r.notes || '',
+      depositStatus: r.depositStatus || 'receipt_uploaded',
+      reservationType: r.reservationType || 'private',
+      source: r.source || 'public-booking',
+      createdAt: r.createdAt || new Date().toISOString(),
+      receiptFileName: r.receiptFileName || '',
       receiptUrl
     };
 
     sheet.appendRow([
-      finalReservation.id || '',
-      finalReservation.customerName || '',
-      finalReservation.phone || '',
-      finalReservation.date || '',
-      finalReservation.time || '',
-      finalReservation.guests || '',
-      finalReservation.area || '',
-      finalReservation.tableId || '',
-      finalReservation.status || 'new',
-      finalReservation.notes || '',
-      finalReservation.depositStatus || 'pending',
-      finalReservation.reservationType || 'private',
-      finalReservation.source || 'public-booking',
-      finalReservation.createdAt || new Date().toISOString(),
-      finalReservation.receiptFileName || '',
-      receiptUrl || ''
+      finalReservation.id,
+      finalReservation.customerName,
+      finalReservation.phone,
+      finalReservation.date,
+      finalReservation.time,
+      finalReservation.guests,
+      finalReservation.area,
+      finalReservation.tableId,
+      finalReservation.status,
+      finalReservation.notes,
+      finalReservation.depositStatus,
+      finalReservation.reservationType,
+      finalReservation.source,
+      finalReservation.createdAt,
+      finalReservation.receiptFileName,
+      finalReservation.receiptUrl
     ]);
 
-    return {
-      ok: true,
-      reservation: finalReservation
-    };
+    return { ok: true, reservation: finalReservation };
 
   } finally {
     lock.releaseLock();
   }
 }
 
-function assignTable({ area, guests, date, existingReservations }) {
+function assignTable({ guests, date, existingReservations }) {
+  const activeStatuses = ['new', 'confirmed', 'arrived', 'waiting'];
+  const targetDate = normalizeDate(date);
+
   const taken = new Set(
     existingReservations
       .filter(r =>
-        String(r.date || '') === String(date || '') &&
-        String(r.area || '') === String(area || '') &&
-        !['cancelled', 'done'].includes(String(r.status || 'new')) &&
+        normalizeDate(r.date) === targetDate &&
+        activeStatuses.includes(String(r.status || 'new')) &&
         String(r.tableId || '')
       )
       .map(r => String(r.tableId))
   );
 
-  const candidates = TABLES
-    .filter(t => t.area === area)
-    .filter(t => Number(t.seats) >= Number(guests))
-    .filter(t => !taken.has(String(t.id)))
-    .sort((a, b) => Number(a.seats) - Number(b.seats) || Number(a.id) - Number(b.id));
+  for (const area of AREA_ORDER) {
+    const candidates = TABLES
+      .filter(t => t.area === area)
+      .filter(t => Number(t.seats) >= Number(guests))
+      .filter(t => !taken.has(String(t.id)))
+      .sort((a, b) => Number(a.seats) - Number(b.seats) || Number(a.id) - Number(b.id));
 
-  return candidates[0]?.id || '';
-}
-
-function saveReceiptToDrive(r) {
-  try {
-    if (!RECEIPTS_FOLDER_ID) return '';
-
-    const folder = DriveApp.getFolderById(RECEIPTS_FOLDER_ID);
-
-    const base64 = r.receiptImageBase64.split(',')[1];
-    const contentType = r.receiptImageBase64
-      .split(',')[0]
-      .replace('data:', '')
-      .replace(';base64', '');
-
-    const bytes = Utilities.base64Decode(base64);
-
-    const safeName = `${r.date || 'date'}_${r.time || 'time'}_${r.customerName || 'customer'}_${r.receiptFileName || 'receipt.jpg'}`;
-    const blob = Utilities.newBlob(bytes, contentType, safeName);
-
-    const file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-    return file.getUrl();
-
-  } catch (err) {
-    return '';
+    if (candidates.length) {
+      return {
+        area,
+        tableId: candidates[0].id
+      };
+    }
   }
+
+  return {
+    area: '',
+    tableId: ''
+  };
 }
 
 function getReservations() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  const sheet = getSheet();
   const values = sheet.getDataRange().getValues();
 
   if (values.length <= 1) return [];
 
   const headers = values.shift();
 
-  return values.map(row => {
-    const item = {};
-    headers.forEach((h, i) => item[h] = row[i]);
-    return item;
-  });
+  return values
+    .filter(row => row.some(cell => cell !== ''))
+    .map(row => {
+      const item = {};
+      headers.forEach((h, i) => item[h] = row[i]);
+      return item;
+    });
 }
 
 function updateReservationStatus(id, status) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  const sheet = getSheet();
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
 
@@ -205,22 +199,67 @@ function updateReservationStatus(id, status) {
   return { ok: false, error: 'Reservation not found' };
 }
 
+function saveReceiptToDrive(r) {
+  try {
+    if (!RECEIPTS_FOLDER_ID || !r.receiptImageBase64) return '';
+
+    const folder = DriveApp.getFolderById(RECEIPTS_FOLDER_ID);
+    const base64 = r.receiptImageBase64.split(',')[1];
+
+    const contentType = r.receiptImageBase64
+      .split(',')[0]
+      .replace('data:', '')
+      .replace(';base64', '');
+
+    const bytes = Utilities.base64Decode(base64);
+
+    const safeName =
+      `${r.date || 'date'}_${r.time || 'time'}_${r.customerName || 'customer'}_${r.receiptFileName || 'receipt.jpg'}`;
+
+    const blob = Utilities.newBlob(bytes, contentType, safeName);
+    const file = folder.createFile(blob);
+
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    return file.getUrl();
+
+  } catch (err) {
+    return '';
+  }
+}
+
+function normalizeDate(value) {
+  if (!value) return '';
+
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+
+  const str = String(value);
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+
+  try {
+    return Utilities.formatDate(new Date(value), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  } catch (e) {
+    return str.slice(0, 10);
+  }
+}
+
 function normalizeTime(value) {
   const str = String(value || '');
+
   if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
 
   if (str.includes('T')) {
     const d = new Date(str);
-    return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
+    return String(d.getUTCHours()).padStart(2, '0') + ':' +
+           String(d.getUTCMinutes()).padStart(2, '0');
   }
 
   return str.slice(0, 5);
-}
-
-function json(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function json(data) {
